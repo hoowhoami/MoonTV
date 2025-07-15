@@ -14,10 +14,11 @@ import {
   getAllPlayRecords,
   isFavorited,
   savePlayRecord,
+  subscribeToDataUpdates,
   toggleFavorite,
 } from '@/lib/db.client';
 import { SearchResult } from '@/lib/types';
-import { getVideoResolutionFromM3u8 } from '@/lib/utils';
+import { getVideoResolutionFromM3u8, processImageUrl } from '@/lib/utils';
 
 import EpisodeSelector from '@/components/EpisodeSelector';
 import PageLayout from '@/components/PageLayout';
@@ -916,6 +917,22 @@ function PlayPageClient() {
     })();
   }, [currentSource, currentId]);
 
+  // 监听收藏数据更新事件
+  useEffect(() => {
+    if (!currentSource || !currentId) return;
+
+    const unsubscribe = subscribeToDataUpdates(
+      'favoritesUpdated',
+      (favorites: Record<string, any>) => {
+        const key = generateStorageKey(currentSource, currentId);
+        const isFav = !!favorites[key];
+        setFavorited(isFav);
+      }
+    );
+
+    return unsubscribe;
+  }, [currentSource, currentId]);
+
   // 切换收藏
   const handleToggleFavorite = async () => {
     if (
@@ -1205,7 +1222,10 @@ function PlayPageClient() {
 
       artPlayerRef.current.on('video:timeupdate', () => {
         const now = Date.now();
-        if (now - lastSaveTimeRef.current > 5000) {
+        if (
+          now - lastSaveTimeRef.current >
+          (process.env.NEXT_PUBLIC_STORAGE_TYPE === 'd1' ? 10000 : 5000)
+        ) {
           saveCurrentPlayProgress();
           lastSaveTimeRef.current = now;
         }
@@ -1591,7 +1611,7 @@ function PlayPageClient() {
               <div className='bg-gray-300 dark:bg-gray-700 aspect-[2/3] flex items-center justify-center rounded-xl overflow-hidden'>
                 {videoCover ? (
                   <img
-                    src={videoCover}
+                    src={processImageUrl(videoCover)}
                     alt={videoTitle}
                     className='w-full h-full object-cover'
                   />
